@@ -1,0 +1,16 @@
+From: security-alerts@g00gle.com
+To: user@example.com
+Subject: Urgent: Immediate Action Required on Your Account
+
+Dear Customer,
+
+We have detected unusual activity in your account. To prevent any disruption, you must verify your account immediately by clicking the link below:
+
+http://192.168.1.50/verify-account
+
+Please note that failure to act immediately may result in account suspension.
+
+Thank you for your prompt attention.
+
+Sincerely,
+Poalim Bank Security Team
