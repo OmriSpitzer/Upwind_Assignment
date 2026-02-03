@@ -127,6 +127,9 @@ def isUsingSuspiciousWords(word):
 
 @app.route("/checkMailPhishing", methods=["POST"])
 def checkMailPhishing():
+    suspiciousWords = []
+    susPercentage = 0
+    
     try:
         textFile = request.json.get("textFile")
         if not textFile:
@@ -137,14 +140,19 @@ def checkMailPhishing():
         words = textFile.split()
         newWords = []
         for word in words:
-            if isSuspiciousLink(word) or isSuspiciousEmail(word) or isUsingSuspiciousWords(word):
-                # Highlight suspicious links, emails, and urgent language in red and bold
+            if isSuspiciousLink(word) or isSuspiciousEmail(word):
                 newWords.append(f"<b style='color: red;'>{word}</b>")
+                suspiciousWords.append(word)
+                susPercentage = 100
+            elif isUsingSuspiciousWords(word):
+                newWords.append(f"<b style='color: red;'>{word}</b>")
+                suspiciousWords.append(word)
+                susPercentage = min(100, susPercentage + 10)
             else:
                 newWords.append(word)
         
         newTextFile = ' '.join(newWords)
-        return jsonify(response=newTextFile, status=200)
+        return jsonify(response=newTextFile, status=200, suspiciousWords=suspiciousWords, susPercentage=susPercentage)
     except Exception as e:
         print("Error checking mail phishing: " + str(e))
         return jsonify(response="Error checking mail phishing", status=500)

@@ -1,0 +1,14 @@
+From: support@bankpoalim.co.il
+To: user@example.com
+Subject: Account Activity Notification
+
+Dear Customer,
+
+We would like to inform you that a recent review of your account activity was completed as part of our routine security monitoring.
+
+No action is required at this time. If you notice any activity that does not look familiar, please contact our customer support team through the official Bank Poalim website or by phone.
+
+Thank you for your cooperation and for banking with us.
+
+Sincerely,
+Bank Poalim Customer Support

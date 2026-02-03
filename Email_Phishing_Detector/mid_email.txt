@@ -1,0 +1,14 @@
+From: support@bankpoalim.co.il
+To: user@example.com
+Subject: Account Notification
+
+Dear Customer,
+
+This message is to inform you of a recent review related to your account. During routine monitoring, a small amount of suspicious activity was identified.
+
+While this is not urgent, we recommend that you verify and confirm your account details the next time you log in through our official channels.
+
+No further action is required at this time.
+
+Sincerely,
+Bank Poalim Customer Support
