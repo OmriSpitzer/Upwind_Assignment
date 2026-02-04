@@ -7,14 +7,18 @@ app = Flask(__name__)
 CORS(app)
 
 # Suspicious/uncommon domains often used in phishing
-SUSPICIOUS_DOMAINS = [
+SUSPICIOUS_DOMAINS_ENDINGS = {
     '.xyz', '.tk', '.ml', '.ga', '.cf', '.gq', '.top', '.buzz', 
     '.club', '.work', '.click', '.link', '.info', '.ru', '.cn',
     '.bit.ly', '.tinyurl', '.t.co', '.goo.gl'
-]
-URL_PREFIXES = ['http://', 'https://', 'www.']
+}
 
-# Well-known legitimate domains (used to detect spoofed lookalikes)
+# URL prefixes
+URL_PREFIXES = {
+    'http://', 'https://', 'www.'
+}
+
+# Well-known legitimate domains
 LEGITIMATE_DOMAINS = {
     'paypal.com', 'google.com', 'gmail.com', 'googlemail.com',
     'amazon.com', 'microsoft.com', 'apple.com', 'outlook.com',
@@ -24,135 +28,183 @@ LEGITIMATE_DOMAINS = {
     'chase.com', 'bankofamerica.com', 'wellsfargo.com', 'citibank.com',
 }
 
-# Urgent/suspicious language often used in phishing to pressure the reader
-SUSPICIOUS_WORDS = {
-    'urgent', 'immediately', 'asap', 'action required', 'verify now',
-    'confirm now', 'suspended', 'expired', 'limited time', 'act now',
-    'click here', 'verify your account', 'update your account',
-    'confirm your identity', 'urgent action', 'immediate action',
-    'your account', 'verify', 'confirm', 'suspicious activity',
-}
-# Single-word variants for token-level check (multi-word handled in text)
-SUSPICIOUS_WORDS_SINGLE = {
-    'urgent', 'immediately', 'asap', 'suspended', 'expired', 'verify',
-    'confirm', 'click', 'update', 'limited', 'action', 'required',
+# Common substitutions often used in typosquatting (spoofed addresses)
+COMMON_SUBSTITUTIONS = {
+    '0': 'o',
+    '1': 'l',
+    '|': 'l',
+    '5': 's',
 }
 
-# Character substitutions often used in typosquatting (spoofed addresses)
-# Maps spoof chars to canonical: 0->o, 1->l, |->l, 5->s so paypa1->paypal, g00gle->google
-SPOOF_SUBSTITUTIONS = str.maketrans('01|5', 'olls')
+"""
+Check if the domain is suspicious
+@param domain: domain to check
+@return: True if the domain is suspicious, False otherwise
+"""
+def is_suspicious_domain(domain):
+    # Spoofed uppercase lookalike (e.g. PaypAL.com, Google.com) -> suspicious
+    lowered_domain = domain.lower()
+    if lowered_domain in LEGITIMATE_DOMAINS and lowered_domain != domain:
+        return True
 
-def isSuspiciousLink(word):
-    if not any(prefix in word.lower() for prefix in URL_PREFIXES):
+    # Suspicious domain endings check
+    for ending in SUSPICIOUS_DOMAINS_ENDINGS:
+        if domain.endswith(ending):
+            return True
+
+    # Common substitutions check
+    subsitute_domain = ''
+    for letter in lowered_domain:
+        if letter in COMMON_SUBSTITUTIONS:
+            subsitute_domain += COMMON_SUBSTITUTIONS[letter]
+        else:
+            subsitute_domain += letter
+
+    # Spoofed lookalike check
+    if subsitute_domain in LEGITIMATE_DOMAINS and subsitute_domain != domain:
+        return True
+    return False
+
+"""
+Check if the word is a suspicious link
+@param word: word to check
+@return: True if the word is a suspicious link, False otherwise
+"""
+def is_suspicious_link(word):
+    # URL prefix check
+    is_url = False
+    for url in URL_PREFIXES:
+        if word.lower().startswith(url):
+            is_url = True
+            break
+    if not is_url:
         return False
     
-    # Check for IP address in URL (e.g., http://192.168.1.1/path)
-    ip_pattern = r'https?://\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}'
-    if re.search(ip_pattern, word):
-        return True
-    
+    # Split word into url and domain
+    splitted_word = word.split('//', 1)
+    if len(splitted_word) == 1:
+        splitted_word = word.split('.', 1)
+
+    domain = splitted_word[1]
+    hostname = domain.split('/')[0].split('?')[0]  # strip path/query
+
+    # IP address check - flag IP-based URLs as suspicious (before domain format check)
+    parts = hostname.split('.')
+    if len(parts) == 4:
+        try:
+            if all(part.isdigit() and 0 <= int(part) <= 255 for part in parts):
+                return True
+        except (ValueError, IndexError):
+            pass
+
+    # Domain format check
+    if '.' not in hostname or hostname.count('.') != 1:
+        return False
+
     # Check for suspicious domains
-    word_lower = word.lower()
-    for domain in SUSPICIOUS_DOMAINS:
-        if domain in word_lower:
-            return True
+    if is_suspicious_domain(hostname):
+        return True
+
+    return False
+
+"""
+Check if the word is a suspicious email
+@param word: word to check
+@return: True if the word is a suspicious email, False otherwise
+"""
+def is_suspicious_email(word):
+    # '@' symbol check
+    if '@' not in word or word.count('@') != 1:
+        return False
     
+    # Split email into username and domain
+    split_email = word.split('@')
+    if len(split_email) != 2 or not split_email[0] or not split_email[1]:
+        return False
+
+    # Domain format check
+    domain = split_email[1]
+    if '.' not in domain or domain.count('.') != 1:
+        return False
+
+    # Check for suspicious domains
+    if is_suspicious_domain(domain):
+        return True
+
     return False
 
-def _normalize_for_spoof_check(domain):
-    """Normalize domain for typosquatting check (e.g. paypa1 -> paypal)."""
-    d = domain.lower().strip()
-    return d.translate(SPOOF_SUBSTITUTIONS)
+"""
+Check if the word is using suspicious words
+@param word: word to check
+@return: True if the word is using suspicious words, False otherwise
+"""
+def is_suspicious_word(word):
+    suspicious_words_single = {
+        'urgent', 'immediately', 'asap', 'suspended', 'expired', 'verify',
+        'confirm', 'click', 'update', 'limited', 'action', 'required',
+        'now', 
+    }
 
-def _domain_looks_like_legitimate(domain):
-    """True only if domain is an exact match to a known legitimate domain (not normalized)."""
-    if not domain:
-        return False
-    return domain.lower() in LEGITIMATE_DOMAINS
-
-def _domain_is_spoofed_lookalike(domain):
-    """True if domain looks like a legitimate one but has minor differences (spoofed)."""
-    if not domain or '@' in domain:
-        return False
-    domain = domain.lower()
-    norm = _normalize_for_spoof_check(domain)
-    # Exact match -> legitimate
-    if domain in LEGITIMATE_DOMAINS:
-        return False
-    # Typosquatting: e.g. paypa1.com, g00gle.com — normalizes to same as a legit domain but differs
-    for legit in LEGITIMATE_DOMAINS:
-        if _normalize_for_spoof_check(legit) == norm and domain != legit:
-            return True
-    # Brand + suffix: e.g. paypal-security.com, google-verify.com (not the real domain)
-    for legit in LEGITIMATE_DOMAINS:
-        base = legit.split('.')[0]
-        if (domain.startswith(base + '-') or domain.startswith(base + '.')) and domain != legit:
-            return True
-    return False
-
-def isSuspiciousEmail(word):
-    """Check for spoofed sender addresses (look similar to legitimate but have minor differences)."""
-    if not word or '@' not in word:
-        return False
-    # Basic email shape
-    parts = word.split('@')
-    if len(parts) != 2 or not parts[0] or not parts[1]:
-        return False
-
-    domain = parts[1].strip().lower()
-    if not domain or '.' not in domain:
-        return False
-
-    # Legitimate sender: domain is exactly known -> not suspicious
-    if _domain_looks_like_legitimate(domain):
-        return False
-    # Spoofed lookalike (e.g. paypa1.com, g00gle.com) -> suspicious
-    if _domain_is_spoofed_lookalike(domain):
+    if word.lower() in suspicious_words_single:
         return True
     return False
 
-def isUsingSuspiciousWords(word):
-    """Check for urgent/suspicious language (e.g. urgent, immediately, action required)."""
-    if not word or not isinstance(word, str):
-        return False
-    w = word.lower().strip()
-    # Remove common punctuation for matching
-    w_clean = re.sub(r'[^\w\s]', '', w)
-    if w_clean in SUSPICIOUS_WORDS_SINGLE:
-        return True
-    # Check against full set (handles "action required" etc. when passed as phrase)
-    if w in SUSPICIOUS_WORDS or w_clean in SUSPICIOUS_WORDS:
-        return True
-    return False
+"""
+Calculate the suspicious percentage of the word
+@param word: word to calculate the suspicious percentage
+@return: suspicious percentage of the word
+"""
+def suspicious_percentage(word):
+    if is_suspicious_link(word) or is_suspicious_email(word):
+        # Return 100% if the word is a suspicious link or email
+        return 100
+    elif is_suspicious_word(word):
+        # Return 10% if the word is using suspicious words
+        return 10
+    else:
+        return 0
 
+
+"""
+Detect if the text file is a phishing email
+@param textFile: text file to check
+@return: jsonify object with the response, suspicious words, and suspicious percentage
+"""
 @app.route("/checkMailPhishing", methods=["POST"])
 def checkMailPhishing():
-    suspiciousWords = []
-    susPercentage = 0
+    # Variables
+    suspicious_words = []        # Suspicious words list
+    sus_percentage = 0           # Suspicious percentage
     
+    # Get the text file from the request
+    textFile = request.json.get("textFile")
+    if not textFile:
+        return jsonify(error="No text file inserted", status=400)
+
     try:
-        textFile = request.json.get("textFile")
-        if not textFile:
-            return jsonify(response="No text file inserted", status=400)
         print("Text file received with length: " + str(len(textFile)))
 
-        # Split text into words and check each for suspicious links
-        words = textFile.split()
-        newWords = []
-        for word in words:
-            if isSuspiciousLink(word) or isSuspiciousEmail(word):
-                newWords.append(f"<b style='color: red;'>{word}</b>")
-                suspiciousWords.append(word)
-                susPercentage = 100
-            elif isUsingSuspiciousWords(word):
-                newWords.append(f"<b style='color: red;'>{word}</b>")
-                suspiciousWords.append(word)
-                susPercentage = min(100, susPercentage + 10)
+        # Split text into words and check each if is suspicious
+        text_splitted = textFile.split()
+        new_words = []
+
+        for word in text_splitted:
+            # Remove common punctuation for matching
+            word_clean = word.strip('.,!?:;()[] \n\t')
+
+            # Get the suspicious percentage of the word
+            percentage = suspicious_percentage(word_clean) if word_clean else 0
+
+            # If the word is suspicious, add it to the new words list and update the suspicious words list and percentage
+            if percentage > 0:
+                new_words.append(f"<b style='color: red;'>{word}</b>")
+                suspicious_words.append(word)
+                sus_percentage += percentage
             else:
-                newWords.append(word)
+                new_words.append(word)
         
-        newTextFile = ' '.join(newWords)
-        return jsonify(response=newTextFile, status=200, suspiciousWords=suspiciousWords, susPercentage=susPercentage)
+        new_text_file = ' '.join(new_words)
+        return jsonify(response=new_text_file, status=200, suspiciousWords=suspicious_words, susPercentage=min(100, sus_percentage))
     except Exception as e:
         print("Error checking mail phishing: " + str(e))
         return jsonify(response="Error checking mail phishing", status=500)
