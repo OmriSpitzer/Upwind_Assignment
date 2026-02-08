@@ -141,7 +141,7 @@ Check if the word is using suspicious words
 def is_suspicious_word(word):
     suspicious_words_single = {
         'urgent', 'immediately', 'asap', 'suspended', 'expired', 'verify',
-        'confirm', 'click', 'update', 'limited', 'action', 'required',
+        'confirm', 'click', 'update', 'limited', 'required', 'must',
         'now', 
     }
 
